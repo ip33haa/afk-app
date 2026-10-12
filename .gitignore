@@ -1,0 +1,11 @@
+.venv/
+dist/
+build/
+__pycache__/
+*.pyc
+credential_provider/build/
+models/*
+!models/.gitkeep
+.graphify/
+*.user
+.vs/
