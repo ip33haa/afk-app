@@ -9,11 +9,16 @@ from __future__ import annotations
 
 import ctypes
 import logging
+import os
 import threading
 import tkinter as tk
 from ctypes import wintypes
+from datetime import datetime
 
-from app.verses import random_verse
+from PIL import Image, ImageDraw, ImageFont, ImageTk
+
+from app.verses import STANDARD_UNLOCK
+from app.wallpaper import lock_image_path
 
 WH_KEYBOARD_LL = 13
 HC_ACTION = 0
@@ -82,6 +87,27 @@ _user32.SetWindowPos.argtypes = [
 _user32.SetWindowPos.restype = wintypes.BOOL
 _kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
 _kernel32.GetModuleHandleW.restype = wintypes.HMODULE
+_kernel32.GetTimeFormatEx.argtypes = [
+    wintypes.LPCWSTR,
+    wintypes.DWORD,
+    ctypes.c_void_p,
+    wintypes.LPCWSTR,
+    wintypes.LPWSTR,
+    ctypes.c_int,
+]
+_kernel32.GetTimeFormatEx.restype = ctypes.c_int
+_kernel32.GetDateFormatEx.argtypes = [
+    wintypes.LPCWSTR,
+    wintypes.DWORD,
+    ctypes.c_void_p,
+    wintypes.LPCWSTR,
+    wintypes.LPWSTR,
+    ctypes.c_int,
+    wintypes.LPCWSTR,
+]
+_kernel32.GetDateFormatEx.restype = ctypes.c_int
+
+_TIME_NOSECONDS = 0x00000002
 
 
 def block_lock_key(vk: int, *, alt: bool, ctrl: bool) -> bool:
@@ -100,14 +126,20 @@ class ScreenLock:
         self._root = root
         self._store = store
         self._locked = False
-        self._message = random_verse()
+        self._message = STANDARD_UNLOCK
         self._window: tk.Toplevel | None = None
         self._status: tk.Label | None = None
         self._pin: tk.StringVar | None = None
         self._error: tk.Label | None = None
         self._after: str | None = None
+        self._clock_after: str | None = None
         self._hook: wintypes.HHOOK | int = 0
         self._hookproc = _HOOKPROC(self._on_key)
+        self._image_label: tk.Label | None = None
+        self._signin: tk.Frame | None = None
+        self._photo: ImageTk.PhotoImage | None = None
+        self._background: Image.Image | None = None
+        self._fonts: dict[str, ImageFont.ImageFont] = {}
 
     def is_locked(self) -> bool:
         return self._locked
@@ -117,9 +149,8 @@ class ScreenLock:
         return self._message
 
     def lock(self, message: str = "") -> None:
-        del message
         if not self._locked:
-            self._message = random_verse()
+            self._message = message or STANDARD_UNLOCK
         self._locked = True
         self._on_ui(self._show)
 
@@ -155,41 +186,30 @@ class ScreenLock:
         window.configure(bg="black")
         window.protocol("WM_DELETE_WINDOW", lambda: None)
         window.bind("<Alt-F4>", lambda _event: "break")
+        window.bind("<Button-1>", self._reveal_signin)
         window.attributes("-topmost", True)
         self._window = window
-        self._status = tk.Label(
-            window,
-            text=self._message,
-            fg="white",
-            bg="black",
-            font=("Segoe UI", 22),
-            wraplength=860,
-            justify="center",
-        )
-        self._status.pack(expand=True)
-        form = tk.Frame(window, bg="black")
-        form.pack(side="bottom", pady=48)
-        tk.Label(form, text="PIN", fg="white", bg="black", font=("Segoe UI", 12)).pack(side="left")
+        self._image_label = tk.Label(window, borderwidth=0, bg="black")
+        self._image_label.place(x=0, y=0, relwidth=1, relheight=1)
+        self._image_label.bind("<Button-1>", self._reveal_signin)
+        self._status = None
+        self._signin = tk.Frame(window, bg="#1c1c1c")
+        tk.Label(self._signin, text="PIN", fg="white", bg="#1c1c1c", font=("Segoe UI", 12)).pack(side="left", padx=(16, 8), pady=12)
         self._pin = tk.StringVar()
-        entry = tk.Entry(form, textvariable=self._pin, show="*", font=("Segoe UI", 14), width=24)
-        entry.pack(side="left", padx=8)
+        entry = tk.Entry(self._signin, textvariable=self._pin, show="*", font=("Segoe UI", 16), width=22, bg="#2a2a2a", fg="white", insertbackground="white", relief="flat")
+        entry.pack(side="left", padx=(0, 8), pady=12)
         entry.bind("<Return>", self._submit_pin)
-        tk.Button(form, text="Unlock", command=self._submit_pin).pack(side="left")
-        self._error = tk.Label(window, text="", fg="#e07070", bg="black", font=("Segoe UI", 11))
-        self._error.pack(side="bottom", pady=(0, 12))
-        tk.Label(
-            window,
-            text="If the camera cannot see you, enter your PIN.",
-            fg="#bbbbbb",
-            bg="black",
-            font=("Segoe UI", 11),
-        ).pack(side="bottom")
+        tk.Button(self._signin, text="Unlock", command=self._submit_pin).pack(side="left", padx=(0, 16))
+        self._error = tk.Label(self._signin, text="", fg="#ffb4b4", bg="#1c1c1c", font=("Segoe UI", 11))
+        self._error.pack(side="left", padx=(0, 12))
         self._place(window)
+        self._prepare_background(window)
+        self._render()
         self._install_hook()
         self._clip()
         self._raise()
-        entry.focus_set()
         self._keep()
+        self._tick_clock()
 
     def _hide(self) -> None:
         self._release_input()
@@ -198,12 +218,22 @@ class ScreenLock:
         self._status = None
         self._pin = None
         self._error = None
+        self._image_label = None
+        self._signin = None
+        self._photo = None
+        self._background = None
         if self._after is not None and window is not None:
             try:
                 window.after_cancel(self._after)
             except tk.TclError:
                 pass
+        if self._clock_after is not None and window is not None:
+            try:
+                window.after_cancel(self._clock_after)
+            except tk.TclError:
+                pass
         self._after = None
+        self._clock_after = None
         if window is not None:
             try:
                 window.destroy()
@@ -211,8 +241,70 @@ class ScreenLock:
                 pass
 
     def _apply_message(self) -> None:
-        if self._status is not None:
-            self._status.configure(text=self._message)
+        if self._window is not None:
+            self._render()
+
+    def _reveal_signin(self, _event=None) -> None:
+        signin = self._signin
+        if signin is None or not self._locked:
+            return
+        signin.place(relx=0.5, rely=0.94, anchor="s")
+        for child in signin.winfo_children():
+            if isinstance(child, tk.Entry):
+                child.focus_set()
+                break
+
+    def _prepare_background(self, window: tk.Toplevel) -> None:
+        window.update_idletasks()
+        width = window.winfo_width()
+        height = window.winfo_height()
+        if width < 100 or height < 100:
+            width = max(self._root.winfo_vrootwidth(), 1)
+            height = max(self._root.winfo_vrootheight(), 1)
+        image = _open_wallpaper()
+        if image is None:
+            self._background = Image.new("RGB", (width, height), (18, 28, 42))
+            return
+        self._background = _cover(image.convert("RGB"), width, height)
+
+    def _render(self) -> None:
+        background = self._background
+        label = self._image_label
+        if background is None or label is None:
+            return
+        frame = background.copy()
+        draw = ImageDraw.Draw(frame)
+        width, height = frame.size
+        center_x, center_y = _primary_center(self._root, width, height)
+        clock_size = max(64, int(height * 0.11))
+        date_size = max(18, int(height * 0.028))
+        caption_size = max(14, int(height * 0.018))
+        _shadow_text(draw, (center_x, center_y), _windows_time(), self._font(clock_size, light=True))
+        _shadow_text(draw, (center_x, center_y + int(height * 0.075)), _windows_date(), self._font(date_size, light=False))
+        _caption(draw, center_x, center_y + int(height * 0.13), self._message, self._font(caption_size, light=False), width)
+        self._photo = ImageTk.PhotoImage(frame)
+        label.configure(image=self._photo)
+
+    def _font(self, size: int, *, light: bool) -> ImageFont.ImageFont:
+        key = f"{'light' if light else 'regular'}-{size}"
+        cached = self._fonts.get(key)
+        if cached is not None:
+            return cached
+        windir = os.environ.get("WINDIR", r"C:\Windows")
+        names = ("segoeuil.ttf", "segoeui.ttf") if light else ("segoeui.ttf", "segoeuil.ttf")
+        font: ImageFont.ImageFont
+        try:
+            font = ImageFont.truetype(_font_file(windir, names), size)
+        except OSError:
+            font = ImageFont.load_default()
+        self._fonts[key] = font
+        return font
+
+    def _tick_clock(self) -> None:
+        if not self._locked or self._window is None:
+            return
+        self._render()
+        self._clock_after = self._window.after(1000, self._tick_clock)
 
     def _place(self, window: tk.Toplevel) -> None:
         self._root.update_idletasks()
@@ -278,6 +370,8 @@ class ScreenLock:
             ctrl = bool(_user32.GetAsyncKeyState(VK_CONTROL) & 0x8000)
             if block_lock_key(int(info.vkCode), alt=alt, ctrl=ctrl):
                 return 1
+            if int(wparam) in (WM_KEYDOWN, WM_SYSKEYDOWN):
+                self._root.after(0, self._reveal_signin)
         return _user32.CallNextHookEx(self._hook or None, code, wparam, lparam)
 
     def _submit_pin(self, _event=None) -> None:
@@ -291,3 +385,85 @@ class ScreenLock:
             self._pin.set("")
         if self._error is not None:
             self._error.configure(text="That PIN was not accepted")
+
+
+def _font_file(windir: str, names: tuple[str, ...]) -> str:
+    fonts = os.path.join(windir, "Fonts")
+    for name in names:
+        path = os.path.join(fonts, name)
+        if os.path.isfile(path):
+            return path
+    raise OSError("Segoe UI is not installed")
+
+
+def _open_wallpaper() -> Image.Image | None:
+    path = lock_image_path()
+    if path is None:
+        return None
+    try:
+        with Image.open(path) as image:
+            return image.convert("RGB")
+    except OSError:
+        logging.getLogger("afk").info("wallpaper could not be opened")
+        return None
+
+
+def _cover(image: Image.Image, width: int, height: int) -> Image.Image:
+    scale = max(width / image.width, height / image.height)
+    resized = image.resize((max(1, int(image.width * scale)), max(1, int(image.height * scale))), Image.Resampling.LANCZOS)
+    left = max(0, (resized.width - width) // 2)
+    top = max(0, (resized.height - height) // 2)
+    return resized.crop((left, top, left + width, top + height))
+
+
+def _primary_center(root: tk.Tk, width: int, height: int) -> tuple[int, int]:
+    origin_x = root.winfo_vrootx()
+    origin_y = root.winfo_vrooty()
+    primary_w = max(root.winfo_screenwidth(), 1)
+    primary_h = max(root.winfo_screenheight(), 1)
+    center_x = min(width - 1, max(0, -origin_x + primary_w // 2))
+    center_y = min(height - 1, max(0, -origin_y + int(primary_h * 0.40)))
+    return center_x, center_y
+
+
+def _shadow_text(draw: ImageDraw.ImageDraw, xy: tuple[int, int], text: str, font: ImageFont.ImageFont) -> None:
+    x, y = xy
+    draw.text((x + 2, y + 3), text, font=font, fill=(0, 0, 0), anchor="mm")
+    draw.text((x, y), text, font=font, fill=(255, 255, 255), anchor="mm")
+
+
+def _caption(draw: ImageDraw.ImageDraw, center_x: int, top: int, text: str, font: ImageFont.ImageFont, width: int) -> None:
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if not lines:
+        return
+    line_height = max(18, int(getattr(font, "size", 18) * 1.35))
+    for index, line in enumerate(lines[:4]):
+        _shadow_text(draw, (center_x, top + index * line_height), _fit_line(line, font, int(width * 0.7)), font)
+
+
+def _fit_line(text: str, font: ImageFont.ImageFont, max_width: int) -> str:
+    if font.getlength(text) <= max_width:
+        return text
+    words = text.split()
+    kept: list[str] = []
+    for word in words:
+        trial = " ".join([*kept, word])
+        if font.getlength(trial) > max_width:
+            break
+        kept.append(word)
+    return " ".join(kept) if kept else text
+
+
+def _windows_time() -> str:
+    buffer = ctypes.create_unicode_buffer(80)
+    if _kernel32.GetTimeFormatEx(None, _TIME_NOSECONDS, None, None, buffer, 80):
+        return buffer.value
+    return datetime.now().strftime("%H:%M")
+
+
+def _windows_date() -> str:
+    buffer = ctypes.create_unicode_buffer(80)
+    if _kernel32.GetDateFormatEx(None, 0, None, "dddd, MMMM d", buffer, 80, None):
+        return buffer.value
+    return datetime.now().strftime("%A, %B %#d")
+

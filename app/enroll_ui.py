@@ -78,22 +78,27 @@ class SettingsWindow:
             row=8, column=0, columnspan=2, sticky="w"
         )
 
+        self._verse = tk.BooleanVar(value=config.show_verse)
+        ttk.Checkbutton(frame, text="Show a Bible verse under the clock", variable=self._verse).grid(
+            row=9, column=0, columnspan=2, sticky="w"
+        )
+
         provider = (
             "Looking at the camera unlocks the Windows lock screen."
             if credential_provider_registered()
-            else "Looking at the camera unlocks AFK's lock screen. The Windows sign-in screen still needs your password."
+            else "Looking at the camera unlocks AFK's lock screen. It uses your Windows wallpaper, with the clock and date."
         )
-        ttk.Label(frame, text=provider, wraplength=460).grid(row=9, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        ttk.Label(frame, text=provider, wraplength=460).grid(row=10, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
         warning = (
             "Your PIN is encrypted for this Windows account only. Any program you run can decrypt it. "
             "A normal webcam can be fooled more easily than Windows Hello, including by a photo. "
             "A cold start still asks you to sign in."
         )
-        ttk.Label(frame, text=warning, wraplength=460).grid(row=10, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        ttk.Label(frame, text=warning, wraplength=460).grid(row=11, column=0, columnspan=2, sticky="w", pady=(8, 0))
 
         buttons = ttk.Frame(frame)
-        buttons.grid(row=11, column=0, columnspan=2, sticky="e", pady=(12, 0))
+        buttons.grid(row=12, column=0, columnspan=2, sticky="e", pady=(12, 0))
         ttk.Button(buttons, text="Save and start", command=self._save).grid(row=0, column=0, padx=(0, 8))
         ttk.Button(buttons, text="Close", command=self.close).grid(row=0, column=1)
 
@@ -195,6 +200,7 @@ class SettingsWindow:
         self._config.grace_seconds = grace
         self._config.require_blink = bool(self._blink.get())
         self._config.start_with_windows = bool(self._startup.get())
+        self._config.show_verse = bool(self._verse.get())
         self._config.monitoring = True
         self._config.save()
         set_start_with_windows(self._config.start_with_windows)

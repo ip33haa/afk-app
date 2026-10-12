@@ -5,8 +5,9 @@ import unittest
 from pathlib import Path
 
 from app.screen_lock import VK_APPS, VK_ESCAPE, VK_F4, VK_LWIN, VK_TAB, block_lock_key
-from app.verses import VERSES, random_verse
+from app.verses import VERSES, lock_screen_text, random_verse
 from app.secure_store import SecureStore
+from app.wallpaper import lock_image_path
 
 
 class VerseTests(unittest.TestCase):
@@ -14,6 +15,25 @@ class VerseTests(unittest.TestCase):
         shown = {f"“{verse.text}”\n\n{verse.reference}" for verse in VERSES}
         self.assertIn(random_verse(), shown)
         self.assertGreater(len(VERSES), 10)
+
+    def test_the_normal_lock_screen_can_be_chosen(self):
+        shown = {f"“{verse.text}”\n\n{verse.reference}" for verse in VERSES}
+        self.assertEqual(
+            lock_screen_text(show_verse=False, require_blink=False),
+            "Locked — look at the camera to unlock",
+        )
+        self.assertEqual(
+            lock_screen_text(show_verse=False, require_blink=True),
+            "Locked — look at the camera and blink",
+        )
+        self.assertIn(lock_screen_text(show_verse=True, require_blink=False), shown)
+
+
+class WallpaperTests(unittest.TestCase):
+    def test_windows_wallpaper_path_is_a_file_when_present(self):
+        path = lock_image_path()
+        if path is not None:
+            self.assertTrue(path.is_file())
 
 
 class LockKeyTests(unittest.TestCase):

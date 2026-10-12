@@ -18,6 +18,7 @@ class Config:
     camera_index: int = 0
     monitoring: bool = False
     start_with_windows: bool = True
+    show_verse: bool = False
 
     @classmethod
     def load(cls) -> "Config":
@@ -48,6 +49,8 @@ class Config:
                 cfg.monitoring = bool(raw["monitoring"])
             if "start_with_windows" in raw:
                 cfg.start_with_windows = bool(raw["start_with_windows"])
+            if "show_verse" in raw:
+                cfg.show_verse = bool(raw["show_verse"])
         except (TypeError, ValueError):
             return cls()
         return cfg

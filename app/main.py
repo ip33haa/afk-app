@@ -24,6 +24,7 @@ from app.screen_lock import ScreenLock
 from app.secure_store import SecureStore
 from app.session import SessionMonitor
 from app.unlock_client import UnlockClient
+from app.verses import lock_screen_text
 
 _ERROR_ALREADY_EXISTS = 183
 _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -184,8 +185,14 @@ class App:
             return
         if self.screen is None:
             return
-        self.screen.lock()
+        self.screen.lock(self._lock_text())
         self._log.info("screen locked")
+
+    def _lock_text(self) -> str:
+        return lock_screen_text(
+            show_verse=self.config.show_verse,
+            require_blink=self.config.require_blink,
+        )
 
     def _unlock_screen(self) -> None:
         if self.screen is not None and self.screen.is_locked() and not self.session.is_locked():
@@ -285,7 +292,7 @@ class App:
                 self._log.info("locked from the menu")
             return
         if self.screen is not None and not self.screen.is_locked():
-            self.screen.lock()
+            self.screen.lock(self._lock_text())
             self._log.info("screen locked from the menu")
 
     def _quit(self, _icon=None, _item=None) -> None:

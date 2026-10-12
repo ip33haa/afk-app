@@ -56,3 +56,15 @@ VERSES = (
 def random_verse() -> str:
     verse = random.choice(VERSES)
     return f"“{verse.text}”\n\n{verse.reference}"
+
+
+STANDARD_BLINK = "Locked — look at the camera and blink"
+STANDARD_UNLOCK = "Locked — look at the camera to unlock"
+
+
+def lock_screen_text(*, show_verse: bool, require_blink: bool) -> str:
+    if show_verse:
+        return random_verse()
+    if require_blink:
+        return STANDARD_BLINK
+    return STANDARD_UNLOCK
