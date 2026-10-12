@@ -86,7 +86,7 @@ class SettingsWindow:
         provider = (
             "Looking at the camera unlocks the Windows lock screen."
             if credential_provider_registered()
-            else "Looking at the camera unlocks AFK's lock screen. It uses your Windows wallpaper, with the clock and date."
+            else "Looking at the camera unlocks AFK's lock screen. Your wallpaper, the clock, and an anime line stay up until it sees you."
         )
         ttk.Label(frame, text=provider, wraplength=460).grid(row=10, column=0, columnspan=2, sticky="w", pady=(8, 0))
 

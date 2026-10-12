@@ -17,7 +17,7 @@ from datetime import datetime
 
 from PIL import Image, ImageDraw, ImageFont, ImageTk
 
-from app.verses import STANDARD_UNLOCK
+from app.anime import random_anime_line
 from app.wallpaper import lock_image_path
 
 WH_KEYBOARD_LL = 13
@@ -126,7 +126,7 @@ class ScreenLock:
         self._root = root
         self._store = store
         self._locked = False
-        self._message = STANDARD_UNLOCK
+        self._message = random_anime_line()
         self._window: tk.Toplevel | None = None
         self._status: tk.Label | None = None
         self._pin: tk.StringVar | None = None
@@ -150,7 +150,7 @@ class ScreenLock:
 
     def lock(self, message: str = "") -> None:
         if not self._locked:
-            self._message = message or STANDARD_UNLOCK
+            self._message = message or random_anime_line()
         self._locked = True
         self._on_ui(self._show)
 

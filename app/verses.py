@@ -5,6 +5,8 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 
+from app.anime import random_anime_line
+
 
 @dataclass(frozen=True)
 class Verse:
@@ -58,13 +60,8 @@ def random_verse() -> str:
     return f"“{verse.text}”\n\n{verse.reference}"
 
 
-STANDARD_BLINK = "Locked — look at the camera and blink"
-STANDARD_UNLOCK = "Locked — look at the camera to unlock"
-
-
 def lock_screen_text(*, show_verse: bool, require_blink: bool) -> str:
+    del require_blink
     if show_verse:
         return random_verse()
-    if require_blink:
-        return STANDARD_BLINK
-    return STANDARD_UNLOCK
+    return random_anime_line()
