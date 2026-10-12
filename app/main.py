@@ -167,9 +167,9 @@ class App:
             status = "Locked — blink detection is unavailable. Turn the blink check off in setup."
         elif self.engine.state == "watching_locked" and windows_locked and not self._provider_installed:
             status = "Windows is locked. Type your password. Camera unlock cannot dismiss the Windows lock screen."
+        elif self.screen is not None and self.screen.is_locked():
+            status = self.screen.message
         self._set_status(status, color)
-        if covered and self.screen is not None:
-            self.screen.set_message(status)
         if self.engine.state != self._logged_state or result.action:
             self._log.info("state=%s action=%s", self.engine.state, result.action or "-")
             self._logged_state = self.engine.state
@@ -184,7 +184,7 @@ class App:
             return
         if self.screen is None:
             return
-        self.screen.lock("Locked — look at the camera and blink")
+        self.screen.lock()
         self._log.info("screen locked")
 
     def _unlock_screen(self) -> None:
@@ -285,7 +285,7 @@ class App:
                 self._log.info("locked from the menu")
             return
         if self.screen is not None and not self.screen.is_locked():
-            self.screen.lock("Locked — look at the camera and blink")
+            self.screen.lock()
             self._log.info("screen locked from the menu")
 
     def _quit(self, _icon=None, _item=None) -> None:

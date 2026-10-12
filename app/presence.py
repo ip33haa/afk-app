@@ -169,9 +169,7 @@ class PresenceEngine:
         if self.state == "watching_locked":
             if self._wait_until_face_lost:
                 return "Unlock did not complete — step away and look again"
-            if self.require_blink:
-                return "Locked — look at the camera and blink"
-            return "Locked — look at the camera to unlock"
+            return "Locked"
         if self.state == "unlocking":
             return "Face recognized, unlocking"
         if self.state == "cooldown":

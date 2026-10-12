@@ -13,6 +13,8 @@ import threading
 import tkinter as tk
 from ctypes import wintypes
 
+from app.verses import random_verse
+
 WH_KEYBOARD_LL = 13
 HC_ACTION = 0
 WM_KEYDOWN = 0x0100
@@ -98,7 +100,7 @@ class ScreenLock:
         self._root = root
         self._store = store
         self._locked = False
-        self._message = "Locked — look at the camera and blink"
+        self._message = random_verse()
         self._window: tk.Toplevel | None = None
         self._status: tk.Label | None = None
         self._pin: tk.StringVar | None = None
@@ -110,8 +112,14 @@ class ScreenLock:
     def is_locked(self) -> bool:
         return self._locked
 
-    def lock(self, message: str) -> None:
-        self._message = message or self._message
+    @property
+    def message(self) -> str:
+        return self._message
+
+    def lock(self, message: str = "") -> None:
+        del message
+        if not self._locked:
+            self._message = random_verse()
         self._locked = True
         self._on_ui(self._show)
 
@@ -155,7 +163,8 @@ class ScreenLock:
             fg="white",
             bg="black",
             font=("Segoe UI", 22),
-            wraplength=700,
+            wraplength=860,
+            justify="center",
         )
         self._status.pack(expand=True)
         form = tk.Frame(window, bg="black")
@@ -170,7 +179,7 @@ class ScreenLock:
         self._error.pack(side="bottom", pady=(0, 12))
         tk.Label(
             window,
-            text="Look at the camera and blink. If the camera cannot see you, enter your PIN.",
+            text="If the camera cannot see you, enter your PIN.",
             fg="#bbbbbb",
             bg="black",
             font=("Segoe UI", 11),

@@ -5,7 +5,15 @@ import unittest
 from pathlib import Path
 
 from app.screen_lock import VK_APPS, VK_ESCAPE, VK_F4, VK_LWIN, VK_TAB, block_lock_key
+from app.verses import VERSES, random_verse
 from app.secure_store import SecureStore
+
+
+class VerseTests(unittest.TestCase):
+    def test_a_lock_message_is_a_known_verse(self):
+        shown = {f"“{verse.text}”\n\n{verse.reference}" for verse in VERSES}
+        self.assertIn(random_verse(), shown)
+        self.assertGreater(len(VERSES), 10)
 
 
 class LockKeyTests(unittest.TestCase):
